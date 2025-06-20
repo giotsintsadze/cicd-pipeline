@@ -46,7 +46,9 @@ pipeline {
 
         stage('Scan Image') {
             steps {
-                sh "trivy image ${env.IMAGE_NAME} || true"
+                sh """
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image ${env.IMAGE_NAME} || true
+                """
             }
         }
 
@@ -64,7 +66,7 @@ pipeline {
             }
         }
 
-        stage('Push Image (Optional)') {
+        stage('Push Image') {
             when {
                 anyOf {
                     branch 'main'
