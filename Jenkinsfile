@@ -2,13 +2,11 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS 7.8.0'
+        nodejs 'nodejs'
     }
 
     environment {
         BRANCH = "${env.BRANCH_NAME}"
-        PORT = BRANCH == 'main' ? '3000' : '3001'
-        IMAGE_NAME = BRANCH == 'main' ? 'nodemain:v1.0' : 'nodedev:v1.0'
     }
 
     stages {
@@ -38,24 +36,29 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${IMAGE_NAME} ."
+                script {
+                    def imageName = env.BRANCH == 'main' ? 'nodemain:v1.0' : 'nodedev:v1.0'
+                    env.IMAGE_NAME = imageName
+                    sh "docker build -t ${env.IMAGE_NAME} ."
+                }
             }
         }
 
         stage('Scan Image') {
             steps {
-                sh "trivy image ${IMAGE_NAME} || true"
+                sh "trivy image ${env.IMAGE_NAME} || true"
             }
         }
 
         stage('Deploy') {
             steps {
                 script {
-                    def container = BRANCH == 'main' ? 'main_container' : 'dev_container'
+                    def container = env.BRANCH == 'main' ? 'main_container' : 'dev_container'
+                    def port = env.BRANCH == 'main' ? '3000' : '3001'
                     sh """
                         docker ps -q --filter "name=${container}" | xargs -r docker stop
                         docker ps -a -q --filter "name=${container}" | xargs -r docker rm
-                        docker run -d --name ${container} -p ${PORT}:3000 ${IMAGE_NAME}
+                        docker run -d --name ${container} -p ${port}:3000 ${env.IMAGE_NAME}
                     """
                 }
             }
@@ -72,8 +75,8 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh """
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker tag ${IMAGE_NAME} $DOCKER_USER/${IMAGE_NAME}
-                        docker push $DOCKER_USER/${IMAGE_NAME}
+                        docker tag ${env.IMAGE_NAME} $DOCKER_USER/${env.IMAGE_NAME}
+                        docker push $DOCKER_USER/${env.IMAGE_NAME}
                     """
                 }
             }
