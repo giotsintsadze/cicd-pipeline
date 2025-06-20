@@ -5,11 +5,6 @@ pipeline {
         nodejs 'nodejs'
     }
 
-    environment {
-        DOCKER_IMAGE = ''
-        CONTAINER_NAME = ''
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -32,16 +27,23 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
+                    def image = ''
+                    def container = ''
                     if (env.BRANCH_NAME == 'main') {
-                        env.DOCKER_IMAGE = 'nodemain:v1.0'
-                        env.CONTAINER_NAME = 'main_app'
+                        image = 'nodemain:v1.0'
+                        container = 'main_app'
                     } else if (env.BRANCH_NAME == 'dev') {
-                        env.DOCKER_IMAGE = 'nodedev:v1.0'
-                        env.CONTAINER_NAME = 'dev_app'
+                        image = 'nodedev:v1.0'
+                        container = 'dev_app'
                     } else {
                         error("Unsupported branch: ${env.BRANCH_NAME}")
                     }
-                    sh "docker build -t ${DOCKER_IMAGE} ."
+
+                    sh "docker build -t ${image} ."
+
+                    // Save container name/image for next stages using environment
+                    env.CONTAINER_NAME = container
+                    env.DOCKER_IMAGE = image
                 }
             }
         }
@@ -49,10 +51,11 @@ pipeline {
         stage('Clean Previous Container') {
             steps {
                 script {
+                    def container = env.CONTAINER_NAME
                     sh """
-                        if [ \$(docker ps -q -f name=${CONTAINER_NAME}) ]; then
-                            docker stop ${CONTAINER_NAME}
-                            docker rm ${CONTAINER_NAME}
+                        if [ \$(docker ps -q -f name=${container}) ]; then
+                            docker stop ${container}
+                            docker rm ${container}
                         fi
                     """
                 }
@@ -63,7 +66,9 @@ pipeline {
             steps {
                 script {
                     def port = env.BRANCH_NAME == 'main' ? '3000:3000' : '3001:3000'
-                    sh "docker run -d --name ${CONTAINER_NAME} --expose ${port.split(':')[0]} -p ${port} ${DOCKER_IMAGE}"
+                    def container = env.CONTAINER_NAME
+                    def image = env.DOCKER_IMAGE
+                    sh "docker run -d --name ${container} --expose ${port.split(':')[0]} -p ${port} ${image}"
                 }
             }
         }
